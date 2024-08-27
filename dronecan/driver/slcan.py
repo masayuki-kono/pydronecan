@@ -59,6 +59,7 @@ TIMESTAMP_OVERFLOW_PERIOD = 60          # Defined by SLCAN protocol
 
 DEFAULT_BITRATE = 1000000
 DEFAULT_BAUDRATE = 3000000
+DEFAULT_RTSCTS = False
 
 ACK_TIMEOUT = 0.5
 ACK = b'\r'
@@ -83,11 +84,12 @@ IPC_SIGNAL_INIT_OK = 'init_ok'                     # Sent from IO process to the
 IPC_COMMAND_STOP = 'stop'                          # Sent from parent process to the IO process when it's time to exit
 
 class RetrySerial(object):
-    def __init__(self, device, baudrate, bitrate):
-        self.conn = serial.Serial(device, baudrate)
+    def __init__(self, device, baudrate, bitrate, rtscts):
+        self.conn = serial.Serial(device, baudrate, rtscts=rtscts)
         self.device = device
         self.baudrate = baudrate
         self.bitrate = bitrate
+        self.rtscts = rtscts
         self.timeout = 0
         self.lock = threading.RLock()
 
@@ -100,7 +102,7 @@ class RetrySerial(object):
         except Exception:
             pass
         try:
-            self.conn = serial.Serial(self.device, self.baudrate)
+            self.conn = serial.Serial(self.device, self.baudrate, rtscts=self.rtscts)
             self.conn.timeout = self.timeout
             _init_adapter(self.conn, self.bitrate)
             logger.info("Reopen OK")
@@ -557,6 +559,7 @@ def _io_process(device,
                 parent_pid,
                 bitrate=None,
                 baudrate=None,
+                rtscts=None,
                 max_adapter_clock_rate_error_ppm=None,
                 fixed_rx_delay=None,
                 max_estimated_rx_delay_to_resync=None,
@@ -631,9 +634,11 @@ def _io_process(device,
 
     try:
         if auto_reopen:
-            conn = RetrySerial(device, baudrate or DEFAULT_BAUDRATE, bitrate)
+            conn = RetrySerial(device, baudrate or DEFAULT_BAUDRATE, bitrate,
+                               rtscts=rtscts or DEFAULT_RTSCTS)
         else:
-            conn = serial.Serial(device, baudrate or DEFAULT_BAUDRATE)
+            conn = serial.Serial(device, baudrate or DEFAULT_BAUDRATE,
+                                 rtscts=rtscts or DEFAULT_RTSCTS)
     except Exception as ex:
         logger.error('Could not open port', exc_info=True)
         rx_queue.put(ex)
